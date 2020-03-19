@@ -1,7 +1,8 @@
 from telethon.sync import TelegramClient, events
 #import telehon
-
-
+from telethon.tl.functions.channels import GetParticipantsRequest
+from telethon.tl.types import ChannelParticipantsSearch
+from telethon.tl.types import (PeerChannel)
 
 def checkSell(listsell,listMessage):
     for message in listMessage:
@@ -14,29 +15,97 @@ def checkBuy(listBuy,listMessage):
         if message.upper() in listBuy:
             return True
     return False
-    
-#check quantity number and unit (k,....) convert to number
-def isNumber(number):
-    #return a number
 
-    return number
+
+def is_float(value):
+    try:
+        float(value)
+        return True
+    except:
+        return False
+#check quantity number and unit (k,....) convert to number
+
 
 #check type of coin 100eth 3btc 
 
+#tack so va chu 
+def splitNumberString(string,count,list_coint)->dict():
+    numStr =dict()
+    Quanlity= ""
+    CoinType =""
+    for a in string: 
+        if (a.isnumeric()) == True:
+            Quanlity += str(a)
+        else: 
+            CoinType += str(a)
+        if a.upper() == 'K':
+            Quanlity = Quanlity + '000'
+            CoinType = ''
+    numStr['Quanlity'+str(count)]=Quanlity
+    if CoinType.upper() in list_coint:
+        numStr['CoinType'+str(count)]=CoinType
+    return numStr
+# kiem tra xem chuoi cos chu va so ko
+def isNumStr(string):
+    num =0
+    str =0
+    for a in string: 
+        if (a.isnumeric()) == True: 
+            num = num +1
+        else:
+            if a == '.'or a == ',' : 
+                continue
+            str = str +1
+    if num > 0 and str > 0:
+        return True
+    else:
+        return False
+
+#count coint
+def countCoin(messageList,listCoin):
+    count = 0
+    for msg in messageList:
+        for coin in listCoin:
+            if coin in msg.upper():
+                count +=1        
+    return count
+
+#chek name of coin
+
+
+#check soluon
 #check price
 
 # def get
 # reject message not buy/sell
-def processMessage(message)->list():
+def processMessage(message,listCoin)->list():
+    #message = "MUA 50K USDT 24300"
     listMessage = message.split()
-    ojbMessage={}
+    ojbMessage=dict()
+    countCoint = countCoin(listMessage,listCoin)
+    print( "coint count In proce: ",countCoint)
+    count_price =0
+    flagAction = 0
     for msg in listMessage:
-        if checkBuy(msg)==True:
-            ojbMessage["action"]= "Buy"
-        else:
-            ojbMessage["action"]= "Sell"
+        if (msg.upper() == "MUA")and flagAction==0:
+            ojbMessage['action']= "Buy"
+            flagAction=1
+        elif msg.upper() in {"BÁN","BAN"} and flagAction==0:
+            ojbMessage['action']= "Sell"
+            flagAction=1
+        if isNumStr(msg)==True:
+            temp = splitNumberString(msg,count_price,listCoin)
+            ojbMessage.update(temp)
+            if (ojbMessage["Quanlity"+str(count_price)] != 0):
+                count_price += 1
+        if  (is_float(msg) == True) and count_price < countCoint - 1 :
+            ojbMessage['Quanlity'+str(count_price)] = msg
+            count_price += 1
+        if msg.upper() in listCoin:
+            ojbMessage["CoinType"+str(count_price-1)]= msg.upper()
 
-
+    if is_float(msg)==True:
+        ojbMessage["price"] = msg
 
     return ojbMessage
 
@@ -45,32 +114,79 @@ def conect():
     #config
     api_id = "1265435"
     api_hash = '17e1fd69156fa33ec73960a5806b4897'
-    client = TelegramClient('lhvietanh', api_id, api_hash)
-    group_name = {'Chợ Bitcoin Sài Gòn','Các thánh than cà khịa'}
-    listSell= {'Bán','ban'}
-    listBuy={'mua'}
+    client = TelegramClient('sessiong_name', api_id, api_hash)
+    #group_name = {'Các thánh than cà khịa','Chợ Bitcoin Hà Nội'}
+    listCoin = {'ETH',' B','BTC','U','USDT','BIT','E'}
+   
+   
 
-    @client.on(events.NewMessage(chats=group_name))
-    async def handler(event):
+    
+    
+    try:
+        @client.on(events.NewMessage(chats=None))
+        async def handler(event):
         # Good
-        chat = await event.get_chat()
-        #print(chat)
-        sender = await event.get_sender()
-        print("GroupID:",chat.id,"Group_name: ",chat.title,"UserName: ",sender.username," --- Chat: ",event.raw_text)
+            try:
+                chat = await event.get_chat()
+                
+            #print(chat)
+                sender =await event.get_sender()
+                print("GroupID:",str(chat.id),"Group_name: ",str(chat.title),"UserName: ",str(sender.username)," --- Chat: ",str(event.raw_text))
+                list_record = list()
+                
+                list_chat= processMessage(event.raw_text,listCoin)
+                print(list_chat)
+                
+                num_record =0 
+                for i in range(10):
+                    if ("Quanlity"+str(num_record)) in list_chat and ("CoinType"+str(num_record)) :
+                       
+                        recorddb = dict()
+                        recorddb['Groupid']= chat.id
+                        recorddb['GroupName']= chat.title
+                        recorddb['UserName']= sender.username
+                        recorddb['UserID']= sender.id
+                        recorddb['UserPhone']= sender.phone
+                        recorddb['Chat']= event.raw_text
+                        recorddb['action']= list_chat['action']
+                        recorddb['Quanlity']= list_chat['Quanlity'+str(num_record)]
+                        recorddb['CoinType']= list_chat['CoinType'+str(num_record)]
+                        list_record.append(recorddb)
+                        ####
+                        # send thist record to database >>> list_record
+                        '''
+                        myclient = pymongo.MongoClient("mongodb://localhost:27017/")
+                        mydb = myclient["mydatabase"]
+                        mycol = mydb["customers"]
+                        ----recorddb is dict() type
+                        recorddb =  {'Groupid': 1135988787, 'GroupName': 'Chợ Bitcoin Hà Nội', 'UserName': 'isabeLLathu', 'UserID': 155296816, 'UserPhone': None, 'Chat': 'Bán 60 eth giá tốt', 'action': 'Sell', 'Quanlity': '60', 'CoinType': 'ETH'}
 
-        sender = await event.get_sender()
-        #print("send_information:", sender)
-        print ("------------------------")
-        #chat_id = event.chat_id
-        #sender_id = event.sender_id        
-        #print(sender,"(",sender_id,"): ",chat)
-    
-    
+                        x = mycol.insert_one(recorddb)
+                        '''
+                        ####
+                        print ("Recrod to database ",recorddb)
+                        num_record = num_record +1
+                    
+            #sender = await ev81ent.get_sender()
+            #print("send_information:", se  nder)
+
+                #print (str(processMessage(event.raw_text,listCoin)))
+                print("-------------")
+            #chat_id = event.chat_id
+            except Exception as identifier:
+                pass
+    except Exception as identifier:
+        pass
+   
     #client.conversation()
     client.start()
     client.run_until_disconnected()
 
+
 def main():
+    listCoin = {'ETH',' B','BTC','USDT'}
+    msg = "bán 100ETH và 2 BTC , 20kUSDT giá 23.56"
+    #print (processMessage(msg,listCoin))
     conect()
 
 if __name__ == "__main__":
@@ -87,7 +203,6 @@ bot_nochats=False, verified=False, restricted=False, min=False, bot_inline_geo=F
   photo_big=FileLocationToBeDeprecated(volume_id=857419100, local_id=285383), dc_id=5),
    status=UserStatusOnline(expires=datetime.datetime(2020, 3, 14, 15, 31, 39, tzinfo=datetime.timezone.utc)),
     bot_info_version=None, restriction_reason=[], bot_inline_placeholder=None, lang_code=None)
-
 -->get_chat
  Channel(id=1090543698, title='Chợ Bitcoin Sài Gòn', photo=ChatPhoto(photo_small=FileLocationToBeDeprecated(volume_id=858110199, 
  local_id=133965), photo_big=FileLocationToBeDeprecated(volume_id=858110199, local_id=133967), dc_id=5), 
